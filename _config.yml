@@ -1,0 +1,7 @@
+name: Omer Anson
+markdown: kramdown
+permalink: /blog/:year/:month/:day/:title
+
+title:             'The ramblings of a coder'
+#tagline:               'A programming blog by Omer Anson'
+
