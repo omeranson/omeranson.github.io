@@ -1,0 +1,12 @@
+@startuml
+
+Policy - Topology
+Policy "1" --> "*" PortPolicy
+Policy ---> "1" Action : UnknownPortAction
+Policy ---> "*" Action : InitialActions
+PortPolicy "1" --> "*" PortPolicyRule
+PortPolicy --> "1" Action : DefaultAction
+PortPolicyRule --> "*" Action
+PortPolicyRule --> "1" Filter
+
+@enduml

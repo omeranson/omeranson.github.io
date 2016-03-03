@@ -1,0 +1,11 @@
+@startuml
+
+Port1 -> OVS : DHCP Discover (Broadcast)
+OVS ->x Port2 : DHCP Discover
+OVS -> Port1 : DHCP Offer
+Port1 -> OVS : DHCP Request
+OVS ->x Port2 : DHCP Request
+OVS -> Port1 : DHCP Acknowledge
+
+@enduml
+

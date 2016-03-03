@@ -1,0 +1,8 @@
+@startuml
+
+Port1 -> OVS : ARP Request for IP of Port2
+OVS ->x Port2 : ARP Request for IP of Port2
+OVS -> Port1 : ARP Reply - IP of Port2 is at MAC of Port2
+
+@enduml
+

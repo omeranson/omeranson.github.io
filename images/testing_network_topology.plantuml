@@ -1,0 +1,23 @@
+@startuml
+Topology "1" -> "1" Network
+Topology "1" --> "*" Subnet
+Topology "1" --> "*" Router
+Router "1" - "*" Subnet
+note bottom of Router: Router connects\nbetween subnets.
+Subnet "1" --> "*" Port
+Port "1" -> "1" LogicalPortTap
+LogicalPortTap "1" -> "1" pytun.TunTapDevice
+note left of pytun.TunTapDevice: Manages the TAP interface
+
+class Subnet {
+--
+int id
+}
+
+class Port {
+--
+int id
+}
+
+@enduml
+

@@ -1,0 +1,10 @@
+@startuml
+
+class Topology
+Topology -> Network
+Topology --> Router
+Topology --> Subnet
+Subnet --> Port1
+Subnet --> Port2
+
+@enduml
