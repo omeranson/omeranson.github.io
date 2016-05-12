@@ -45,7 +45,10 @@ ul.posts li a {
     font-size: 1.2em;
 }
 div.header {
-    font-size: 2em;
+    font-size: 3em;
+}
+div.header small {
+    font-size: .5em;
 }
 div.postdate {
     font-size: .8em;

@@ -2,6 +2,6 @@ name: Omer Anson
 markdown: kramdown
 permalink: /blog/:year/:month/:day/:title
 
-title:             'The ramblings of a coder'
-#tagline:               'A programming blog by Omer Anson'
+title:             'The Ramblings Of A Coder'
+#tagline:           'By Omer Anson'
 
