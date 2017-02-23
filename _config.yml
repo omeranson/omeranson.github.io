@@ -5,3 +5,5 @@ permalink: /blog/:year/:month/:day/:title
 title:             'The Ramblings Of A Coder'
 #tagline:           'By Omer Anson'
 
+# Google services
+google_analytics: UA-92510576-1

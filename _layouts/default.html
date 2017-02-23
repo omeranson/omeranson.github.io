@@ -4,6 +4,9 @@
             {% include head.html %}
 			<!-- link to main stylesheet -->
 			<link rel="stylesheet" type="text/css" href="/css/main.css">
+			{% if site.google_analytics and jekyll.environment == 'production' %}
+				{% include analytics.html %}
+			{% endif %}
 		</head>
 		<body>
             {% include header.html %}
