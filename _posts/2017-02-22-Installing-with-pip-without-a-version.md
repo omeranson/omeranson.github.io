@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Installing with pip without a version"
-date: 2016-05-17
+date: 2017-02-22
 ---
 
 I ran into this error: "Exception: Versioning for this project requires
