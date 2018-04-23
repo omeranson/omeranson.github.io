@@ -4,8 +4,6 @@ title: "Duck-typing in C++"
 date: 2018-04-16
 ---
 
-<abstract>
-
 Dynamically typed languages, such as Python, or Lua, have duck-typing. What
 about C++? In this post, I will try to bring duck-typing into C++.
 
@@ -57,7 +55,7 @@ This is all very nice, but what if I have a polygon that does not inherit from
 `Poly`? It has the method `sides` that behaves correctly, so where's the
 problem?
 
-# (Not so) Trivial Solution
+# (The Not So) Trivial Solution
 
 Many of you have probably scoffed and said 'Well, obviously, use templates!'
 Well shame on you. Templates are never obvious. And this is no exception!
