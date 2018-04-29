@@ -96,7 +96,7 @@ the local variable `sides` the correct type.
 ([reference](http://en.cppreference.com/w/cpp/language/decltype)) takes
 an expression, and infers the type of that expression. It is important
 to note that the expression isn't actually evaluated. This is important
-since you don't have to worry about side effects (e.g. `begin()` can
+since you don't have to worry about side effects (e.g. if `begin()` can
 only be called once). So `decltype(sides.begin()->length())` means 'the
 return value of `length`, called on the dereferenced return value of
 `begin`, called on `sides`'.
@@ -162,11 +162,12 @@ array. The array size must be known.
 and the types don't match), the iteration starts at `container.begin()`, and increments the
 results as long as it's different from `container.end()`. Note that the types
 may be different, as long as the inequality operator is defined. So, possibly,
-the code becomes equivalent to: (Since C++17, `container.end()` is evaluated once)
+the code becomes similar to:
 
 ```C++
 // for (auto & element : container)
-for (auto it = container.begin(); it != container.end(); it++) {
+auto __end = container.end();
+for (auto it = container.begin(); it != __end; it++) {
 	auto & element = *it;
 	// Do something
 }
@@ -174,11 +175,12 @@ for (auto it = container.begin(); it != container.end(); it++) {
 
 3. If the functions `begin` and `end` exist and are applicable for the type
 of `container`. So, possibly, 
-the code becomes equivalent to: (Since C++17, `container.end()` is evaluated once)
+the code becomes equivalent to:
 
 ```C++
 // for (auto & element : container)
-for (auto it = begin(container); it != end(container); it++) {
+auto __end = end(container);
+for (auto it = begin(container); it != __end; it++) {
 	auto & element = *it;
 	// Do something
 }
@@ -226,12 +228,11 @@ An _alias template_
 allows you to write long template expression as a short
 template. In the example above, `Side<T>` is equivalent to
 `decltype(*begin(std::declval<T>().sides()))`. `Side<T>` is just a
-shorter, more readable alias. I find the example clearer than the
-explanation.
+shorter, more readable alias.
 
 First of all, we define `Side<T>`, which represends the type of objects
 returned by `sides()`. `sides()` can return a list, or vector, or any
-range-iterable object. `Side<T>` it the contained type of that object.
+range-iterable object. `Side<T>` is the contained type of that object.
 In fact, you could replace the use of `auto` with:
 
 ```C++
