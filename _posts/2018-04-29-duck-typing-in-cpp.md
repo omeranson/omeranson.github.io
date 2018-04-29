@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Duck-typing in C++"
-date: 2018-04-16
+date: 2018-04-29
 ---
 
 Dynamically typed languages, such as Python, or Lua, have duck-typing. What
