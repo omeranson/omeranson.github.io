@@ -128,7 +128,6 @@ void PolyUtil::circumference(TDuck & p, PolyUtil::LengthDuck & sum) {
 	for (auto & side : sides) {
 		sum += side.length();
 	}
-	return sum;
 }
 ```
 
@@ -158,14 +157,17 @@ struct SidesDuck {
 };
 ```
 
-And now `IterDuck` (It never ends).
+And now `IterDuck` (It never ends). Since `begin` and `end` are allowed to
+return different types, we'll have `BeginIterDuck` which supports dereference
+and inequality, and `EndIterDuck` which we'll use just to contain the end
+iterator.
 
 ```C++
-struct IterDuck {
+struct BeginIterDuck {
 	virtual LengthDuck operator*() = 0;
-	virtual bool operator==(const IterDuck &) = 0;
 	virtual bool operator!=(const IterDuck &) = 0;
 };
+struct EndIterDuck {};
 ```
 
 Now note that all these classes are abstract. We need to inherit them. I'm going
@@ -205,7 +207,7 @@ public:
 
 ```C++
 template <typename T>
-class IterDuckImpl : public IterDuck {
+class BeginIterDuckImpl : public BeginIterDuck {
 	typedef decltype(begin(std::declval<T>().sides())) IterType;
 	IterType & m_iter;
 public:
@@ -213,22 +215,20 @@ public:
 	virtual LengthDuckImpl<T> operator*() {
 		return *m_iter;
 	};
-	virtual bool operator==(const IterDuck & iterduck) {
-		if (IterDuckImpl<T> & other = dynamic_cast<IterDuckImpl<T> &>(iterduck)) {
-			return m_iter == other.m_iter;
-		}
-		return false;
-	}
-	virtual bool operator==(const IterDuck & iterduck) {
-		if (IterDuckImpl<T> & other = dynamic_cast<IterDuckImpl<T> &>(iterduck)) {
-			return m_iter != other.m_iter;
-		}
-		return false;
+	virtual bool operator!=(const IterDuck & iterduck) {
+		EndIterDuckImpl<T> & other = static_cast(iterduck));
+		return m_iter != other.m_iter;
 	}
 };
-```
 
-{What if begin and end don't return the same type?}
+template <typename T>
+class EndIterDuckImpl : public EndIterDuck {
+	typedef decltype(end(std::declval<T>().sides())) IterType;
+	IterType & m_iter;
+public:
+	EndIterDuckImpl<T>(IterType & iter) : m_iter(iter) {}
+};
+```
 
 ```C++
 template <typename T>
@@ -256,15 +256,16 @@ public:
 	}
 
 	LengthDuckImpl<T> & operator+=(const LengthDuck & other) {
-		// ...
-			m_length += other.m_length;
-		// ...
-		// Exception?
+		LengthDuckImpl<T> & other = static_cast(other);
+		m_length += other.m_length;
 	}
-
-}
+};
 ```
 
+
+{when begin and end return different types: Compilation error: poly.cpp:6:21: error: inconsistent begin/end types in range-based ‘for’ statement: ‘PolyUtil::BeginIterDuck’ and ‘PolyUtil::EndIterDuck’}
+{virtual destructors mandatory in abstract base classes. Otherwise: ../include/poly.h:53:11: warning: deleting object of abstract class type ‘PolyUtil::BeginIterDuck’ which has non-virtual destructor will cause undefined behavior [-Wdelete-non-virtual-dtor]}
+{Note change: `sides` returns reference, not value.}
 {virtual is important} {note no templates}
 
 # Conclusion
