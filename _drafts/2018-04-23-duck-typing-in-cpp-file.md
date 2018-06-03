@@ -6,8 +6,8 @@ date: 2018-04-23
 
 In the previous [part]({reference}), I showed an example of a duck-typed
 function in C++. It bothered me that I have to recompile the code for
-every duck (read template instantiation), and that I have to put the code
-in the header file. I'd prefer most code (except, say, adaptors) to sit
+every duck (due to template instantiation), and that I have to put the code
+in the header file. I'd prefer most of the code (except, say, adaptors) to sit
 in .cpp files.
 
 # Introduction
@@ -97,17 +97,34 @@ is called, the function code is no longer available to be compiled.
 
 # Second Solution
 
-So the intuitive thing to do is to somehow remove templates from the
-real code, and then it can be compiled once. Any templated code has to
-be compiled in the header file. There is no way around it, since only
-then do you know how to instantiate the templates.
+In this blog post, I'm going to try and find a solution to the compilation
+error above.
 
-So how would our code look without templates? Here's one option:
+I should warn you, it ain't pretty. (Unless you like this sort of thing.)
+
+## High Level
+
+The general idea is to remove the temaplates from the code that will live in
+`polyutil.cpp`. This way, `polyutil.cpp` can be compiled once. The down-side
+is that we have to know the parameters in advance.
+
+That's not really a problem in C++. We can use abstract classes with virtual
+functions. The function works on the abstract classes, and their implementation
+has template parameters.
+
+I'm going to compromise, and say that the implementation of these abstract
+classes can be in the header file.  After all, it's
+adaptor code, and not the actual logic.
+
+That was from 10,000 ft. Let's take a closer look.
+
+Our original function looked like this:
 
 ```C++
-PolyUtil::LengthDuck PolyUtil::circumference(TDuck & p) {
+template <typename T>
+PolyUtil::Length<T> PolyUtil::circumference(T & p) {
 	auto sides = p.sides();
-	LengthDuck sum = 0;
+	Length<T> sum = 0;
 	for (auto & side : sides) {
 		sum += side.length();
 	}
@@ -115,158 +132,434 @@ PolyUtil::LengthDuck PolyUtil::circumference(TDuck & p) {
 }
 ```
 
-It looks promising, until you realise you have to define `TDuck`, `LengthDuck`,
-and everything that is needed to get from `TDuck` to `LengthDuck`.
+We need to wrap `T` and `Length<T>` in an abstract class.  Note that `Length<T>`
+is constructed in the function body. That won't do. We can't construct
+an abstract class - we don't know its implementation.
 
-I foresee that LengthDuck might give us an issue, so let's go ahead and change
-the signature so that I can give the function a LengthDuck reference.
+We'll solve that by passing an instance of an abstract class containing
+`Length<T>` as well. The adaptor code will hide this change. That is, the
+adaptor code will retain the original signature, and call the new function
+with its modified signature.
+
+So `T` is wrapped inside an abstract class called `TDuck`. `Length<T>` in
+`LengthDuck`. Since `TDuck` and `LengthDuck` are abstract, we can get away
+with not passing the template parameter.
+
+In the end, the function will look like this:
 
 ```C++
 void PolyUtil::circumference(TDuck & p, PolyUtil::LengthDuck & sum) {
 	auto sides = p.sides();
-	sum = 0;
+	sum.__construct__(0);
 	for (auto & side : sides) {
 		sum += side.length();
 	}
 }
 ```
 
-{LengthDuck (composite-) contains Length<T>, which is initialized with `operator=`.
+Note that there are a lot of steps to cover between having a `TDuck` (or `T`)
+instance, to actually knowing how to sum the lengths. If we walk through the
+function we see that:
 
-Now we can define our classes, `TDuck` and `LengthDuck`.
+```C++
+	auto sides = p.sides();
+```
+
+We need an abstract class to contain the type of `sides()`. We'll call it
+`SidesDuck`.
+
+```C++
+	for (auto & side : sides) { /* ... */ }
+```
+
+`SidesDuck` needs to have `begin()` and `end()` function members, which return
+the iterators. It says
+[here]({reference}) that these iterators may have different types, but I got a compilation
+error when I tried that. So `begin()` and `end()` will return the same type,
+but we'll support the case where `begin(p.sides())` and `end(p.sides())`
+are different. Recall from the previous part that `begin(c)` and `end(c)`
+call `c.begin()` and `c.end()`, respectively, if they exist.
+
+We'll call the iterator (the result of `sides.begin()` and `sides.end()`)
+`IterDuck`. It will have to implement the increment and inequality
+operations to adhere to the reference. It'll also have to support
+the dereference operator so that we can get a single _side_. The type
+of that will be a `SideDuck`. i.e. the iterator returns an instance of
+`SideDuck` when dereferenced.
+
+Lastly,
+```C++
+		sum += side.length();
+```
+
+From the loop body, we know that `LengthDuck`'s `+=` operator must accept
+the return value of `side.length()`.
+
+I sneakily skipped the following line:
+
+```C++
+	sum.__construct__(0);
+```
+
+The assignment operator was changed to a specialised construction member funciton.
+This is so that we can easily tell the difference between two cases: 1) The
+assignment operator is forwarded to the contained object. 2) The assignment
+operator should *create* the contained object. Instead of thinking up heuristics
+of what should be done when, it's easier to just be explicit.
+
+There are a few more requirements. For instance, we need to be very careful
+with the operations on the underlying objects (`T`, `Length<T>`, etc.). We
+don't know what side-effects any operation may have. In C++, this even includes
+assignment.
+
+A complete solution would also have correct memory management, i.e. the memory
+state will have to be the same as if the original templated function was
+called directly.
+
+Lastly, we don't always know if we're going to get copies or references. It's
+up to whoever implemented `T` (the template parameter) and its related objects.
+C++ gives us the tools to tell these cases apart (e.g., overloading, or
+[`is_reference`](http://en.cppreference.com/w/cpp/types/is_reference)), but
+we're going to take the easy way out. We'll assume whatever's more comfortable
+for us.
+
+I think this covers the high- and mid-level stuff.
+
+## Low Level (Sample)
+
+So, as we said, we need to define a bunch of abstract classes. Then we need
+to provide concrete implementations. The abstract classes can't be templated,
+but the concrete implementations will have to be. Therefore, all these
+definitions and implementations have to sit in `polyutil.h`.
+
+Let's start with the abstract classes. The first one is `TDuck`.
 
 ```C++
 struct TDuck {
-	virtual SidesDuck sides() = 0;
+	virtual ~TDuck() {}
+	virtual SidesDuck & sides() = 0;
 };
 ```
 
+As I mentionted above, we have to make sure the memory management is done
+right. Therefore, we're going to include a virtual destructor in every
+class.
+
+Note that `TDuck` returns a reference to a `SidesDuck` on a call to `sides()`.
+`SidesDuck` is an abstract class. We can't move copies of it around, since
+the compiler doesn't know how to initialise copies of abstract classes.
+
+This also makes it easier for us to be conservative with operations on the
+contained objects. As I said above, we have to be very careful on what we
+do with the objects given to us from outside.{reword}{True when `sides` return
+non-reference (i.e. a copy)}
+
+```C++
+struct SidesDuck {
+	virtual ~SidesDuck() {}
+	virtual IterDuckRef begin() = 0;
+	virtual IterDuckRef end() = 0;
+};
+```
+
+As promised, `SidesDuck` has two member functions: `begin()` and `end()`,
+which return an `IterDuckRef`.
+
+Those of you who were paying attention will note that `SidesDuck` return a
+copy of `IterDuckRef`, and not a reference. You can also already guess that
+`IterDuckRef` will hold a reference to `IterDuck`. So what's going on? What's
+the point?
+
+Basically, the magic around range-based for-loops chooses const\_iterators by
+default. This means that using references will for all our references to
+reference constant objects{reword}. That's not good for us, since we want
+to hide away our magic inside these objects, whose const-ness has nothing
+to do with the original objects they are hiding inside.
+
+This also gives us the small benefit that different calls to `begin`
+won't interfere with one another.
+
+Since we return a copy, and not a reference, to `IterDuckRef`, it must
+be a concrete class (not abstract).
+
+```C++
+struct IterDuckRef {
+	IterDuck * m_iterduck;
+	IterDuckRef(IterDuck * iterduck) : m_iterduck(iterduck) {}
+	~IterDuckRef() { delete m_iterduck; }
+	virtual SideDuck & operator*() { return **m_iterduck; }
+	virtual bool operator!=(const IterDuckRef & other) {
+		return (*m_iterduck) != (*other.m_iterduck);
+	}
+	virtual IterDuckRef & operator++() {
+		++(*m_iterduck);
+		return *this;
+	}
+};
+```
+
+As its name suggests, `IterDuckRef` holds a reference to an `IterDuck` (which
+holds the actual iterator), and forwards all calls to that reference.
+
+As a final note on this, in C++17, `begin()` and `end()` are
+allowed to return different types. To make this very long example shorter,
+and allow it to be C++11-compatible, we'll ignore that feature. We can solve
+this (allow the C++17 feature and be C++11 compatible) by holding another
+pointer in `IterDuckRef`.
+
+This could have also been done by adding another layer of indirection in
+`IterDuck`. i.e. have `IterDuck` contain a 'BeginIterDuck` and an
+`EndIterDuck`, each one holding the iterator returned from `begin` and `end`,
+respectively. There's nothing that can't be solved with another layer
+of indirection.
+
+```C++
+struct IterDuck {
+	virtual ~IterDuck() {}
+	virtual SideDuck & operator*() = 0;
+	virtual bool operator!=(const IterDuck &) = 0;
+	virtual IterDuck & operator++() = 0;
+};
+```
+
+`IterDuck` (and `IterDuckRef`) should behave like iterators. The
+increment operator (`operator++`) allows us to move to the next element
+in the loop. The dereference operator (`operator\*`) allows us to get that
+element, and the inequality operator (`operator!=`) allows us to test when
+the loop ended. In our case, we know `operator!=` it will only be called
+with the result of `sides().end()`, but I tried to keep it general.
+
+```C++
+struct SideDuck {
+	virtual ~SideDuck() {}
+	virtual LengthDuck & length() = 0;
+};
+```
+
+We only use `SideDuck` to get the length. So that's the only member function it
+has (`length()`).
+
 ```C++
 struct LengthDuck {
-	virtual LengthDuck & operator=(int) = 0;
+	virtual ~LengthDuck() {}
+	virtual void __construct__(int) = 0;
 	virtual LengthDuck & operator+=(const LengthDuck&) = 0;
 };
 ```
 
-Oy. Now we need to define SidesDuck.
+`LengthDuck` is slightly trickier. If you recall, we changed the signature
+to get a reference to an instance of `LengthDuck` from the caller. Calling
+`__construct__` should create a new instance, which will be the return value.
+Anything else should be forwarded to the contained object.
+
+I think that covers the abstract classes. Now it's time for the implementation.
+
+Recall `TDuck`.
 
 ```C++
-struct SidesDuck {
-	virtual IterDuck begin() = 0;
-	virtual IterDuck end() = 0;
+struct TDuck {
+	virtual ~TDuck() {}
+	virtual SidesDuck & sides() = 0;
 };
 ```
 
-And now `IterDuck` (It never ends). Since `begin` and `end` are allowed to
-return different types, we'll have `BeginIterDuck` which supports dereference
-and inequality, and `EndIterDuck` which we'll use just to contain the end
-iterator.
-
-```C++
-struct BeginIterDuck {
-	virtual LengthDuck operator*() = 0;
-	virtual bool operator!=(const IterDuck &) = 0;
-};
-struct EndIterDuck {};
-```
-
-Now note that all these classes are abstract. We need to inherit them. I'm going
-to compromise, and say that the inherited classes' code can be in the header file.
-After all, it's adaptor code, and not the actual logic. It will probably look
-like this:
-
+The implementation is:
 ```C++
 template <typename T>
 class TDuckImpl : public TDuck {
 	T & m_t;
+	SidesDuckImpl<T> * m_sides;
+	void clear() {
+		delete m_sides; m_sides = nullptr;
+	}
 public:
-	TDuckImpl(T & t) : m_t(t) {}
+	TDuckImpl(T & t) : m_t(t), m_sides(nullptr) {}
+	virtual ~TDuckImpl() { clear(); }
 
-	virtual SidesDuckImpl<T> sides() {
-		return T.sides();
+	virtual SidesDuckImpl<T> & sides() {
+		clear();
+		m_sides = new SidesDuckImpl<T>(m_t.sides());
+		return *m_sides;
 	}
 };
 ```
+
+`TDuckImpl` is a concrete implementation of `TDuck`, with the template
+parameter `T`. We allow template parameters, since this code sits in `polyutil.h`,
+and is compiled every time it's needed. This is our compromise.
+
+`TDuckImpl` stores the reference to the instance of `T` (the argument
+to our function). It also implements `sides()`, which creates and returns
+an implementation of `SidesDuck`. Note that the only operation on the argument
+is calling `m_t.sides()`, and only when someone invokes the wrapping `sides()`
+method.
+
+We know `sides()` will be called exactly once, and we take advantage of that.
+Otherwise, we would have had to handle the memory-management with some more
+magic, like [`std::shared_ptr`]({reference}), or yet another layer of
+indirection.
+
+The next abstract class is `SidesDuck`,
+```C++
+struct SidesDuck {
+	virtual ~SidesDuck() {}
+	virtual IterDuckRef begin() = 0;
+	virtual IterDuckRef end() = 0;
+};
+```
+
+And here is the implementation.
 
 ```C++
 template <typename T>
 class SidesDuckImpl : public SidesDuck {
-	typedef typename decltype(std::declval<T>().sides()) SidesType;
+	typedef decltype(std::declval<T>().sides()) SidesType;
 	SidesType & m_sides;
 public:
 	SidesDuckImpl<T>(SidesType & sides) : m_sides(sides) {}
-	virtual IterDuckImpl<T> begin() {
-		return begin(m_sides);
+	virtual IterDuckRef begin() {
+		return IterDuckRef(new IterDuckImpl<T>(::begin(m_sides)));
 	}
 		
-	virtual IterDuck end() {
-		return end(m_sides);
+	virtual IterDuckRef end() {
+		return IterDuckRef(new IterDuckImpl<T>(::end(m_sides)));
 	}
 };
 ```
 
+Pretty trivial. Contain the return value of `sides()` in `m_sides`. Here we
+assume `sides()` returns a reference. This is different from the previous part.
+
+`begin()` and `end()` forward to `::begin(...)` and `::end(...)`. This should
+take care of adhering to the rules of which `begin`/`end` functions are
+called first. At least in the general case where no-one is being smart and
+override these functions.{reword}
+
+`IterDuckRef` is shown above, and all it does is forward to the `IterDuck`
+reference. Recall that `IterDuck` is:
+
+```C++
+struct IterDuck {
+	virtual ~IterDuck() {}
+	virtual SideDuck & operator*() = 0;
+	virtual bool operator!=(const IterDuck &) = 0;
+	virtual IterDuck & operator++() = 0;
+};
+```
+
+The implementation is:
+
 ```C++
 template <typename T>
-class BeginIterDuckImpl : public BeginIterDuck {
+class IterDuckImpl : public IterDuck {
 	typedef decltype(begin(std::declval<T>().sides())) IterType;
-	IterType & m_iter;
+	IterType m_iter;
+	SideDuckImpl<T> * m_iter_deref;
+	void clear() {
+		delete m_iter_deref;
+		m_iter_deref = nullptr;
+	}
 public:
-	LengthDuckImpl<T>(IterType & iter) : m_iter(iter) {}
-	virtual LengthDuckImpl<T> operator*() {
-		return *m_iter;
+	IterDuckImpl<T>(IterType iter) : m_iter(iter), m_iter_deref(nullptr) {}
+	virtual ~IterDuckImpl<T>() {
+		clear();
+	}
+	virtual SideDuckImpl<T>& operator*() {
+		clear();
+		m_iter_deref = new SideDuckImpl<T>(*m_iter);
+		return *m_iter_deref;
 	};
 	virtual bool operator!=(const IterDuck & iterduck) {
-		EndIterDuckImpl<T> & other = static_cast(iterduck));
+		const IterDuckImpl<T> & other = static_cast<const IterDuckImpl<T> &>(iterduck);
 		return m_iter != other.m_iter;
 	}
-};
-
-template <typename T>
-class EndIterDuckImpl : public EndIterDuck {
-	typedef decltype(end(std::declval<T>().sides())) IterType;
-	IterType & m_iter;
-public:
-	EndIterDuckImpl<T>(IterType & iter) : m_iter(iter) {}
+	virtual IterDuckImpl<T> & operator++() {
+		++m_iter;
+		return *this;
+	}
 };
 ```
 
+Again, mostly trivial. `operator++` and `operator!=` are forwarded to the
+contained iterators (`m_iter`).
+
+There is some magic around the dereference
+operator (`operator*`). We must return a reference (since `SideDuck` is abstract).
+So we carry the burden of memory management, where `IterDuckImpl` maintains a
+pointer to the last dereferenced object, and deletes that pointer upon every
+call to `operator*`. The client code maintains a single reference to whatever
+the iterator returns, so this is safe. But if the client code were to carry
+references accross loop iterations, we would be in deep trouble.
+
+`IterDuck` returns a `SideDuck`.
+
+```C++
+struct SideDuck {
+	virtual ~SideDuck() {}
+	virtual LengthDuck & length() = 0;
+};
+```
+
+It's implementation:
+
 ```C++
 template <typename T>
-class LengthDuckImpl<T> : public LengthDuck {
-	template <typename T>
-	using ConstSide = decltype(*begin(std::declval<T>().sides()));
-
-	template <typename T>
-	using Side = typename std::remove_const<typename std::remove_reference<ConstSide<T> >::type >::type ;
-
-	template <typename T>
-	using Length = decltype(std::declval<Side<T> >().length());
-
-	typedef typename Length<T> LengthType;
-	LengthType * m_length;
-public:
-	LengthDuckImpl<T>() : m_length(nullptr) {}
-	~LengthDuckImpl<T>() {
+class SideDuckImpl : public SideDuck {
+	typedef decltype(*begin(std::declval<T>().sides())) SideType;
+	SideType & m_side;
+	LengthDuckImpl<T> * m_length;
+	typedef typename std::remove_reference<decltype(*(std::declval<LengthDuckImpl<T> >().m_length))>::type LengthType;
+	void clear_length() {
 		delete m_length;
 		m_length = nullptr;
 	}
-
-	LengthDuckImpl<T> & operator=(int i) {
-		m_length = new LengthType(i);
+public:
+	SideDuckImpl<T>(SideType & side) : m_side(side), m_length(nullptr) {}
+	virtual ~SideDuckImpl<T>() {
+		clear_length();
 	}
-
-	LengthDuckImpl<T> & operator+=(const LengthDuck & other) {
-		LengthDuckImpl<T> & other = static_cast(other);
-		m_length += other.m_length;
+	virtual LengthDuckImpl<T> & length() {
+		clear_length();
+		LengthType * l = new LengthType(m_side.length());
+		m_length = new LengthDuckImpl<T>(l);
+		return *m_length;
 	}
 };
 ```
 
+Here we assume that `m_side.length()` returns a non-reference. In the
+original code, the assignment would have called the copy constructor.{verify}
+To mimic this behaviour, we create a new `LengthType` object, and initialise
+it with the copy constructor. We don't really have a choice. Since `length()`
+returns a copy, the compiler won't let us save a reference. The copy has to
+be stored somewhere.
 
-{when begin and end return different types: Compilation error: poly.cpp:6:21: error: inconsistent begin/end types in range-based ‘for’ statement: ‘PolyUtil::BeginIterDuck’ and ‘PolyUtil::EndIterDuck’}
-{virtual destructors mandatory in abstract base classes. Otherwise: ../include/poly.h:53:11: warning: deleting object of abstract class type ‘PolyUtil::BeginIterDuck’ which has non-virtual destructor will cause undefined behavior [-Wdelete-non-virtual-dtor]}
-{Note change: `sides` returns reference, not value.}
-{virtual is important} {note no templates}
+Lastly, we put everything together. An adaptor function, with the original
+signature, looks like this:
+
+```C++
+template <typename T>
+Length<T>
+circumference(T & p) {
+	LengthDuckImpl<T> result;
+	TDuckImpl<T> duck(p);
+	circumference(duck, result);
+	return *result.m_length;
+}
+```
+
+All it does is create a duck wrapper for `p` (a `TDuck` containing a `T`),
+create a duck wrapper for the result (a `LengthDuck` containing a `Length<T>`),
+and calls the non-template implementation.
 
 # Conclusion
+
+Let's recap on what we have done. We've rewritten our duck-typed function
+to accept a `TDuck` abstract class, instead of the actual duck. Note that
+the entire function is without templates. Otherwise, we'd run into the same
+issue.
+
+We have created an abstract class to wrap every type of object we reference
+throughout the function.
+
 
