@@ -1,10 +1,10 @@
 ---
 layout: post
 title: "Duck-typing in C++, part 2"
-date: 2018-04-23
+date: 2018-06-06
 ---
 
-In the previous [part]({reference}), I showed an example of a duck-typed
+In the previous [part]({% post_url 2018-04-23-duck-typing-in-cpp-file%}), I showed an example of a duck-typed
 function in C++. It bothered me that I have to recompile the code for
 every duck (due to template instantiation), and that I have to put the code
 in the header file. I'd prefer most of the code (except, say, adaptors) to sit
@@ -17,7 +17,7 @@ like a duck, it's a duck!' Meaning to say: we don't really care what the
 underlying object is, as long as it has these specific functions.
 
 The general idea behind duck-typing is getting polymorphism-like behaviour
-without having to define a class-hierarchy. In the previous [part]({reference}),
+without having to define a class-hierarchy. In the previous [part]({% post_url 2018-04-23-duck-typing-in-cpp-file%}),
 I introduced the following function (now moved and failing in polyutil.cpp):
 
 ```C++
@@ -32,7 +32,7 @@ PolyUtil::Length<T> PolyUtil::circumference(T & p) {
 }
 ```
 
-Whith the header file (polyutil.h):
+With the header file (polyutil.h):
 
 ```C++
 #ifndef POLY_H
@@ -104,7 +104,7 @@ I should warn you, it ain't pretty. (Unless you like this sort of thing.)
 
 ## High Level
 
-The general idea is to remove the temaplates from the code that will live in
+The general idea is to remove the templates from the code that will live in
 `polyutil.cpp`. This way, `polyutil.cpp` can be compiled once. The down-side
 is that we have to know the parameters in advance.
 
@@ -200,7 +200,7 @@ I sneakily skipped the following line:
 	sum.__construct__(0);
 ```
 
-The assignment operator was changed to a specialised construction member funciton.
+The assignment operator was changed to a specialised construction member function.
 This is so that we can easily tell the difference between two cases: 1) The
 assignment operator is forwarded to the contained object. 2) The assignment
 operator should *create* the contained object. Instead of thinking up heuristics
@@ -240,7 +240,7 @@ struct TDuck {
 };
 ```
 
-As I mentionted above, we have to make sure the memory management is done
+As I mentioned above, we have to make sure the memory management is done
 right. We can put that logic in the virtual destructor. We need it anyway
 since we're using a class hierarchy.
 
@@ -489,7 +489,7 @@ So we carry the burden of memory management, where `IterDuckImpl` maintains a
 pointer to the last dereferenced object, and deletes that pointer upon every
 call to `operator*`. The client code maintains a single reference to whatever
 the iterator returns, so this is safe. But if the client code were to carry
-references accross loop iterations, we would be in deep trouble.
+references across loop iterations, we would be in deep trouble.
 
 `IterDuck` returns a `SideDuck`.
 
