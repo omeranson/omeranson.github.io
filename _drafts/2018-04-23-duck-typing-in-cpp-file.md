@@ -148,7 +148,7 @@ with not passing the template parameter.
 In the end, the function will look like this:
 
 ```C++
-void PolyUtil::circumference(TDuck & p, PolyUtil::LengthDuck & sum) {
+void PolyUtil::circumference(PolyUtil::TDuck & p, PolyUtil::LengthDuck & sum) {
 	auto sides = p.sides();
 	sum.__construct__(0);
 	for (auto & side : sides) {
@@ -174,10 +174,9 @@ We need an abstract class to contain the type of `sides()`. We'll call it
 
 `SidesDuck` needs to have `begin()` and `end()` function members, which return
 the iterators. It says
-[here]({reference}) that these iterators may have different types, but I got a compilation
-error when I tried that. So `begin()` and `end()` will return the same type,
-but we'll support the case where `begin(p.sides())` and `end(p.sides())`
-are different. Recall from the previous part that `begin(c)` and `end(c)`
+[here]({reference}) that in C++11, these iterators must have the same type.
+So `begin()` and `end()` both return an `IterDuckRef` (more on that soon).
+Recall from the previous part that `begin(c)` and `end(c)`
 call `c.begin()` and `c.end()`, respectively, if they exist.
 
 We'll call the iterator (the result of `sides.begin()` and `sides.end()`)
@@ -189,7 +188,7 @@ of that will be a `SideDuck`. i.e. the iterator returns an instance of
 
 Lastly,
 ```C++
-		sum += side.length();
+	sum += side.length();
 ```
 
 From the loop body, we know that `LengthDuck`'s `+=` operator must accept
@@ -209,7 +208,7 @@ of what should be done when, it's easier to just be explicit.
 
 There are a few more requirements. For instance, we need to be very careful
 with the operations on the underlying objects (`T`, `Length<T>`, etc.). We
-don't know what side-effects any operation may have. In C++, this even includes
+don't know what side-effects any operation may have. In C++. This even includes
 assignment.
 
 A complete solution would also have correct memory management, i.e. the memory
@@ -225,7 +224,7 @@ for us.
 
 I think this covers the high- and mid-level stuff.
 
-## Low Level (Sample)
+## Low Level
 
 So, as we said, we need to define a bunch of abstract classes. Then we need
 to provide concrete implementations. The abstract classes can't be templated,
@@ -242,17 +241,16 @@ struct TDuck {
 ```
 
 As I mentionted above, we have to make sure the memory management is done
-right. Therefore, we're going to include a virtual destructor in every
-class.
+right. We can put that logic in the virtual destructor. We need it anyway
+since we're using a class hierarchy.
 
 Note that `TDuck` returns a reference to a `SidesDuck` on a call to `sides()`.
 `SidesDuck` is an abstract class. We can't move copies of it around, since
 the compiler doesn't know how to initialise copies of abstract classes.
 
 This also makes it easier for us to be conservative with operations on the
-contained objects. As I said above, we have to be very careful on what we
-do with the objects given to us from outside.{reword}{True when `sides` return
-non-reference (i.e. a copy)}
+contained objects. As I said above, we have to be very careful with what we
+do to objects given to us from outside.
 
 ```C++
 struct SidesDuck {
@@ -265,16 +263,17 @@ struct SidesDuck {
 As promised, `SidesDuck` has two member functions: `begin()` and `end()`,
 which return an `IterDuckRef`.
 
-Those of you who were paying attention will note that `SidesDuck` return a
+Those of you who were paying attention will note that `SidesDuck` returns a
 copy of `IterDuckRef`, and not a reference. You can also already guess that
 `IterDuckRef` will hold a reference to `IterDuck`. So what's going on? What's
 the point?
 
-Basically, the magic around range-based for-loops chooses const\_iterators by
-default. This means that using references will for all our references to
-reference constant objects{reword}. That's not good for us, since we want
-to hide away our magic inside these objects, whose const-ness has nothing
-to do with the original objects they are hiding inside.
+Basically, the magic around range-based for-loops chooses
+`const_iterators` by default. This means that using references will turn
+all our iterator references to reference constant objects. That's not
+good for us. We want to hide away our magic inside these objects,
+whose const-ness has nothing to do with the original objects they are
+hiding inside.
 
 This also gives us the small benefit that different calls to `begin`
 won't interfere with one another.
@@ -308,7 +307,7 @@ this (allow the C++17 feature and be C++11 compatible) by holding another
 pointer in `IterDuckRef`.
 
 This could have also been done by adding another layer of indirection in
-`IterDuck`. i.e. have `IterDuck` contain a 'BeginIterDuck` and an
+`IterDuck`. i.e. have `IterDuck` contain a `BeginIterDuck` and an
 `EndIterDuck`, each one holding the iterator returned from `begin` and `end`,
 respectively. There's nothing that can't be solved with another layer
 of indirection.
@@ -324,7 +323,7 @@ struct IterDuck {
 
 `IterDuck` (and `IterDuckRef`) should behave like iterators. The
 increment operator (`operator++`) allows us to move to the next element
-in the loop. The dereference operator (`operator\*`) allows us to get that
+in the loop. The dereference operator (`operator*`) allows us to get that
 element, and the inequality operator (`operator!=`) allows us to test when
 the loop ended. In our case, we know `operator!=` it will only be called
 with the result of `sides().end()`, but I tried to keep it general.
@@ -336,8 +335,8 @@ struct SideDuck {
 };
 ```
 
-We only use `SideDuck` to get the length. So that's the only member function it
-has (`length()`).
+We only use `SideDuck` to get the length. So `length()` is the only member
+function `SideDuck` has.
 
 ```C++
 struct LengthDuck {
@@ -388,15 +387,16 @@ public:
 parameter `T`. We allow template parameters, since this code sits in `polyutil.h`,
 and is compiled every time it's needed. This is our compromise.
 
-`TDuckImpl` stores the reference to the instance of `T` (the argument
-to our function). It also implements `sides()`, which creates and returns
-an implementation of `SidesDuck`. Note that the only operation on the argument
-is calling `m_t.sides()`, and only when someone invokes the wrapping `sides()`
+`TDuckImpl` stores the reference to the instance of `T`, the argument to
+`circumference` (That's our original function, a long time ago). It also
+implements `sides()`, which creates and returns an implementation of
+`SidesDuck`. Note that the only operation on the argument is calling
+`m_t.sides()`, and only when someone invokes the wrapping `sides()`
 method.
 
 We know `sides()` will be called exactly once, and we take advantage of that.
 Otherwise, we would have had to handle the memory-management with some more
-magic, like [`std::shared_ptr`]({reference}), or yet another layer of
+magic, like [`std::shared_ptr`](http://en.cppreference.com/w/cpp/memory/shared_ptr), or yet another layer of
 indirection.
 
 The next abstract class is `SidesDuck`,
@@ -433,7 +433,7 @@ assume `sides()` returns a reference. This is different from the previous part.
 `begin()` and `end()` forward to `::begin(...)` and `::end(...)`. This should
 take care of adhering to the rules of which `begin`/`end` functions are
 called first. At least in the general case where no-one is being smart and
-override these functions.{reword}
+overrides these functions.
 
 `IterDuckRef` is shown above, and all it does is forward to the `IterDuck`
 reference. Recall that `IterDuck` is:
@@ -528,11 +528,19 @@ public:
 ```
 
 Here we assume that `m_side.length()` returns a non-reference. In the
-original code, the assignment would have called the copy constructor.{verify}
+original code, the addition-assignment would have probably called the
+copy constructor.  I say probably, since, if `Length<T>`'s `operator+=`
+expected a reference, and `side.length()` returned a reference, the copy
+constructor would be avoided.
+
 To mimic this behaviour, we create a new `LengthType` object, and initialise
-it with the copy constructor. We don't really have a choice. Since `length()`
-returns a copy, the compiler won't let us save a reference. The copy has to
+it with the copy constructor. We don't really have a choice. If `length()`
+returns a copy, the compiler won't let us save a reference. That copy has to
 be stored somewhere.
+
+As I said above, we could differentiate these cases with e.g.
+[`std::is_reference`](http://en.cppreference.com/w/cpp/types/is_reference),
+but we're taking the easy way out. This post has grown long enough.
 
 Lastly, we put everything together. An adaptor function, with the original
 signature, looks like this:
@@ -560,6 +568,20 @@ the entire function is without templates. Otherwise, we'd run into the same
 issue.
 
 We have created an abstract class to wrap every type of object we reference
-throughout the function.
+throughout the new function.
 
+We then created implementations for each of these abstract classes. The
+implementations have template parameters.
 
+Lastly, we wrote an adaptor function accepting the original signature,
+with the original types. The adaptor function wraps the arguments and
+return values, and then calls the rewritten function.
+
+All in all, for 6 lines of code, we wrote approximately 200 lines of adaptor
+code.
+
+This *still* won't do.
+
+I'm going to stop here. I wanted to have the 200 lines of adaptor code written
+automatically, maybe with a [_clang++_](https://clang.llvm.org/) extension.
+That includes quite a bit of research, so this will take a while.
