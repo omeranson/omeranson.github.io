@@ -4,7 +4,7 @@ title: "Duck-typing in C++, part 2"
 date: 2018-06-06
 ---
 
-In the previous [part]({% post_url 2018-04-23-duck-typing-in-cpp-file%}), I showed an example of a duck-typed
+In the previous [part]({% post_url 2018-04-29-duck-typing-in-cpp%}), I showed an example of a duck-typed
 function in C++. It bothered me that I have to recompile the code for
 every duck (due to template instantiation), and that I have to put the code
 in the header file. I'd prefer most of the code (except, say, adaptors) to sit
@@ -17,7 +17,7 @@ like a duck, it's a duck!' Meaning to say: we don't really care what the
 underlying object is, as long as it has these specific functions.
 
 The general idea behind duck-typing is getting polymorphism-like behaviour
-without having to define a class-hierarchy. In the previous [part]({% post_url 2018-04-23-duck-typing-in-cpp-file%}),
+without having to define a class-hierarchy. In the previous [part]({% post_url 2018-04-29-duck-typing-in-cpp%}),
 I introduced the following function (now moved and failing in polyutil.cpp):
 
 ```C++
