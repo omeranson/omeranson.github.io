@@ -7,3 +7,7 @@ title:             'The Ramblings Of A Coder'
 
 # Google services
 google_analytics: UA-92510576-1
+
+# Enable maths
+kramdown:
+  math_engine: mathjax

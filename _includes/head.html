@@ -5,3 +5,6 @@
     {{ page.title }} &middot; {{ site.title }}
   {% endif %}
 </title>
+{% if page.use_math %}
+  {% include mathjax.html %}
+{% endif %}
